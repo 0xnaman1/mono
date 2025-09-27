@@ -4,9 +4,46 @@ import { ArrowLeft, Trophy, Heart, Sword } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import BattleDrawer from "@/components/BattleDrawer";
+import { useState, useEffect } from "react";
+import { useWalletClient, useAccount } from "wagmi";
+import { parseEther } from "viem";
+
+// Contract configuration
+const CONTRACT_ADDRESS = "0x58706f42b71b44b463E085707Afb62456608cA8e"; // Replace with actual contract address
+const CONTRACT_ABI = [
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "player",
+        type: "address",
+      },
+    ],
+    name: "initialize",
+    outputs: [],
+    stateMutability: "payable",
+    type: "function",
+  },
+] as const;
 
 export default function GamePage({ params }: { params: { id: string } }) {
   const router = useRouter();
+  const walletClient = useWalletClient();
+  const { address: eoa } = useAccount();
+
+  // Register section state
+  const [registerAddress, setRegisterAddress] = useState<string | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Transaction state
+  const [isTransactionLoading, setIsTransactionLoading] = useState(false);
+  const [transactionHash, setTransactionHash] = useState<string | null>(null);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Sample game data - in real app this would come from API
   const gameData = {
@@ -93,6 +130,72 @@ export default function GamePage({ params }: { params: { id: string } }) {
     return "bg-red-500";
   };
 
+  const scanNFC = async () => {
+    if (!isClient) {
+      setError("NFC scanning is only available in the browser");
+      return;
+    }
+
+    setIsScanning(true);
+    setError(null);
+
+    try {
+      // Dynamically import the libhalo package only when needed
+      const { execHaloCmdWeb } = await import("@arx-research/libhalo/api/web");
+
+      let command = {
+        name: "sign",
+        keyNo: 1,
+        message: "010203",
+      };
+
+      const res = await execHaloCmdWeb(command);
+
+      if (res && res.publicKey) {
+        // Convert public key to Ethereum address
+        const address = `0x${res.publicKey.slice(-40)}`;
+        setRegisterAddress(address);
+      }
+    } catch (error) {
+      console.error("NFC scan failed:", error);
+      setError(
+        "NFC scan failed. Please make sure your device supports NFC and try again."
+      );
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const registerTransaction = async () => {
+    if (!walletClient.data || !eoa || !registerAddress) {
+      setError("Wallet not connected or NFC address not available");
+      return;
+    }
+
+    setIsTransactionLoading(true);
+    setError(null);
+
+    try {
+      // Execute the contract transaction
+      const hash = await walletClient.data.writeContract({
+        abi: CONTRACT_ABI,
+        address: CONTRACT_ADDRESS,
+        functionName: "initialize",
+        args: [registerAddress],
+        value: parseEther("2"), // $2 stake
+        account: eoa,
+      });
+
+      setTransactionHash(hash);
+      console.log("Transaction submitted:", hash);
+    } catch (error) {
+      console.error("Transaction failed:", error);
+      setError("Transaction failed. Please try again.");
+    } finally {
+      setIsTransactionLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -140,6 +243,102 @@ export default function GamePage({ params }: { params: { id: string } }) {
                     {gameData.progress}% complete
                   </p>
                 </div>
+              </div>
+            </div>
+
+            {/* Register Section */}
+            <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 mb-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                Register
+              </h2>
+              <p className="text-sm text-gray-600 mb-6">
+                Connect your ETHGlobal NFC tag to register for the game after
+                staking $2 and get a chance to compete against multiple people.
+              </p>
+
+              {/* Error Display */}
+              {error && (
+                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-700 text-sm">{error}</p>
+                </div>
+              )}
+
+              {/* Debug Info - Remove this in production */}
+              <div className="mb-4 p-3 bg-gray-100 border border-gray-300 rounded-lg text-xs">
+                <p>
+                  <strong>Debug Info:</strong>
+                </p>
+                <p>
+                  NFC Address:{" "}
+                  {registerAddress ? "✅ Scanned" : "❌ Not scanned"}
+                </p>
+                <p>
+                  Wallet Connected: {eoa ? "✅ Connected" : "❌ Not connected"}
+                </p>
+                <p>
+                  Wallet Client:{" "}
+                  {walletClient.data ? "✅ Available" : "❌ Not available"}
+                </p>
+                <p>
+                  Transaction Loading:{" "}
+                  {isTransactionLoading ? "⏳ Loading" : "✅ Ready"}
+                </p>
+                <p>
+                  Button Disabled:{" "}
+                  {!registerAddress ||
+                  !eoa ||
+                  !walletClient.data ||
+                  isTransactionLoading
+                    ? "❌ Yes"
+                    : "✅ No"}
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="bg-gray-100 rounded-lg p-4">
+                  {registerAddress ? (
+                    <p className="font-mono text-sm">
+                      {formatAddress(registerAddress)}
+                    </p>
+                  ) : (
+                    <p className="text-gray-500">Connect your NFC card</p>
+                  )}
+                </div>
+
+                <Button
+                  onClick={scanNFC}
+                  disabled={isScanning}
+                  variant="outline"
+                  className="w-full"
+                >
+                  {isScanning ? "Scanning..." : "Connect NFC Card"}
+                </Button>
+
+                <Button
+                  onClick={registerTransaction}
+                  className="w-full"
+                  disabled={
+                    !registerAddress ||
+                    !eoa ||
+                    !walletClient.data ||
+                    isTransactionLoading
+                  }
+                >
+                  {isTransactionLoading
+                    ? "Processing Transaction..."
+                    : transactionHash
+                    ? "Registration Complete!"
+                    : "Register for Game"}
+                </Button>
+
+                {transactionHash && (
+                  <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-green-700 text-sm">
+                      Transaction successful! Hash:{" "}
+                      {transactionHash.slice(0, 10)}...
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
