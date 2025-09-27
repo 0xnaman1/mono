@@ -1,36 +1,32 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🕐 InTime
 
-## Getting Started
+InTime lets you stake 2$ and play a game with other people wearing ETHGlobal NFC bands where you compete against each other to sustain your HP and get ranked on the leaderboard.
 
-First, run the development server:
+When the game ends the person who managed to keep the max HP out of players participating will win the collectively staked amount.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
+## How to play?
+
+**Step 1:** Go to our site, pick an upcoming game to participate, register for it by using your NFC and staking 2$.
+
+**Step 2:**
+When the game starts you get 100 HP, and your goal is to keep it as close to 100 as you can as it will keep decaying with time and if you choose not to do anything you'll hit 0 HP and lose the game.
+So find any other participant of the same game, and battle with them by scanning your and the opponent's NFC's band.
+One of you will get random increment from other person, yes you can also loose HP 🙁.
+
+**Step 3:** At the end of the game, the person on top of leaderboard i.e the person with max HP at that time will win.
+
+## Development
+
+Link: https://mono-app-seven.vercel.app/
+
+To run
+
+```
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## TODO
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [ ] myhealth() hp - (current time - last updated time) / decay
+- [ ] game info (start, end, progress, decay)

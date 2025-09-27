@@ -60,14 +60,38 @@ export default function Home() {
       {/* Main content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="text-center">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">
-            Welcome to 🕐 InTime
-          </h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto mb-12">
-            Welcome to our gaming platform where time matters. Experience
-            immersive gameplay with real-time features and interactive elements
-            designed for the modern gamer.
-          </p>
+          {/* Hero Section with Logo */}
+          <div className="flex flex-col md:flex-row items-center justify-center gap-8 mb-8">
+            <div className="order-1 md:order-2">
+              <Image
+                src="/intime.png"
+                alt="InTime Logo"
+                width={200}
+                height={200}
+                className="hover:animate-bounce transition-all duration-300"
+                style={{
+                  animation: "shake 2s ease-in-out infinite",
+                }}
+              />
+            </div>
+            <div className="text-center md:text-left order-2 md:order-1">
+              <h2 className="text-3xl font-bold text-gray-900 mb-4">
+                Welcome to 🕐 InTime
+              </h2>
+              <div className="text-lg text-gray-600 max-w-2xl space-y-4">
+                <p>
+                  InTime lets you stake 2$ and play a game with other people
+                  wearing ETHGlobal NFC bands where you compete against each
+                  other to sustain your HP and get ranked on the leaderboard.
+                </p>
+                <p>
+                  When the game ends the person who managed to keep the max HP
+                  out of players participating will win the collectively staked
+                  amount.
+                </p>
+              </div>
+            </div>
+          </div>
 
           {/* Games List */}
           <div className="w-full max-w-4xl mx-auto">
@@ -108,6 +132,61 @@ export default function Home() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* How to Play Section */}
+          <div className="w-full max-w-4xl mx-auto mt-12">
+            <div className="text-left bg-white rounded-lg shadow-md p-6 border border-gray-200">
+              <h3 className="text-xl font-bold text-gray-900 mb-4 text-center">
+                How to Play?
+              </h3>
+              <div className="space-y-4">
+                <div className="flex items-start space-x-3">
+                  <span className="bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">
+                    1
+                  </span>
+                  <div>
+                    <p className="font-semibold text-gray-900">
+                      Register & Stake
+                    </p>
+                    <p className="text-gray-600">
+                      Go to our site, pick an upcoming game to participate,
+                      register for it by using your NFC and staking 2$.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <span className="bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">
+                    2
+                  </span>
+                  <div>
+                    <p className="font-semibold text-gray-900">
+                      Battle & Maintain HP
+                    </p>
+                    <p className="text-gray-600">
+                      When the game starts you get 100 HP, and your goal is to
+                      keep it as close to 100 as you can as it will keep
+                      decaying with time. Find other participants and battle
+                      with them by scanning your and the opponent's NFC bands.
+                      One of you will get random increment from the other
+                      person, yes you can also lose HP 🙁.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <span className="bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">
+                    3
+                  </span>
+                  <div>
+                    <p className="font-semibold text-gray-900">Win the Prize</p>
+                    <p className="text-gray-600">
+                      At the end of the game, the person on top of leaderboard
+                      i.e the person with max HP at that time will win.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
