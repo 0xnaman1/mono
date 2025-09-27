@@ -26,7 +26,17 @@ const CONTRACT_ABI = [
   },
 ] as const;
 
-export default function GamePage({ params }: { params: { id: string } }) {
+export default async function GamePage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const resolvedParams = await params;
+
+  return <GamePageClient params={resolvedParams} />;
+}
+
+function GamePageClient({ params }: { params: { id: string } }) {
   const router = useRouter();
   const walletClient = useWalletClient();
   const { address: eoa } = useAccount();
@@ -181,7 +191,7 @@ export default function GamePage({ params }: { params: { id: string } }) {
         abi: CONTRACT_ABI,
         address: CONTRACT_ADDRESS,
         functionName: "initialize",
-        args: [registerAddress],
+        args: [registerAddress as `0x${string}`],
         value: parseEther("2"), // $2 stake
         account: eoa,
       });
