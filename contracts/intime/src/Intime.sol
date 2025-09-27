@@ -10,6 +10,7 @@ contract Intime is IEntropyConsumer {
     // Events
     event UserRegistered(address indexed user, uint256 xp, uint256 deposit);
     event BattleResult(address indexed winner, address indexed loser, uint256 xpAmount, uint256 currentTime);
+    event USDCWithdrawn(address indexed user, uint256 amount);
 
     address public owner;
 
@@ -45,6 +46,11 @@ contract Intime is IEntropyConsumer {
 
     modifier beforeEndTime() {
         require(block.timestamp <= endTime, "Game has ended");
+        _;
+    }
+
+    modifier afterEndTime() {
+        require(block.timestamp > endTime, "Game has not ended");
         _;
     }
 
@@ -149,5 +155,14 @@ contract Intime is IEntropyConsumer {
 
     function myHealth(address user) external view returns (uint256) {
         return hp[user];
+    }
+
+    function withdraw(uint256 usdcAmt, address user) external onlyOwner afterEndTime {
+        require(usdcAmt > 0, "Amount must be greater than 0");
+        require(user != address(0), "Invalid user address");
+        require(usdc.balanceOf(address(this)) >= usdcAmt, "Insufficient USDC balance in contract");
+
+        usdc.transfer(user, usdcAmt);
+        emit USDCWithdrawn(user, usdcAmt);
     }
 }

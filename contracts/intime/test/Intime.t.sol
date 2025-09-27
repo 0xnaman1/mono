@@ -37,42 +37,61 @@ contract IntimeTest is Test {
         intime =
             Intime(factory.createGame("Intime", block.timestamp + 1 hours, block.timestamp + 2 hours, 1, entropy, usdc));
         vm.stopPrank();
-    }
-
-    function test_register() public {
-        assertEq(intime.registered(alice), false);
-        assertEq(intime.registered(bob), false);
-        assertEq(address(intime).balance, 0);
 
         vm.startPrank(alice);
         IERC20(usdc).approve(address(intime), 1e6);
         intime.register(alice);
         vm.stopPrank();
 
-        // Verify Alice is registered and contract received ether
-        assertEq(intime.registered(alice), true);
-        assertEq(IERC20(usdc).balanceOf(address(intime)), 1e6);
-
         vm.startPrank(bob);
         IERC20(usdc).approve(address(intime), 1e6);
         intime.register(bob);
         vm.stopPrank();
-
-        // Verify both are registered and contract has received total ether
-        assertEq(intime.registered(alice), true);
-        assertEq(intime.registered(bob), true);
-        assertEq(IERC20(usdc).balanceOf(address(intime)), 2e6);
-
-        console.log("alice registered", intime.registered(alice));
     }
 
-    function test_battle() public {
-        // vm.warp(block.timestamp + 1 hours + 1);
-        // vm.startPrank(owner);
-        // intime.battle(alice, bob);
-        // vm.stopPrank();
+    // function test_register() public {
+    //     assertEq(intime.registered(alice), false);
+    //     assertEq(intime.registered(bob), false);
+    //     assertEq(address(intime).balance, 0);
 
-        console.log("alice registered", intime.registered(alice));
-        // assertEq(intime.registered(alice), true);
+    //     vm.startPrank(alice);
+    //     IERC20(usdc).approve(address(intime), 1e6);
+    //     intime.register(alice);
+    //     vm.stopPrank();
+
+    //     // Verify Alice is registered and contract received ether
+    //     assertEq(intime.registered(alice), true);
+    //     assertEq(IERC20(usdc).balanceOf(address(intime)), 1e6);
+
+    //     vm.startPrank(bob);
+    //     IERC20(usdc).approve(address(intime), 1e6);
+    //     intime.register(bob);
+    //     vm.stopPrank();
+
+    //     // Verify both are registered and contract has received total ether
+    //     assertEq(intime.registered(alice), true);
+    //     assertEq(intime.registered(bob), true);
+    //     assertEq(IERC20(usdc).balanceOf(address(intime)), 2e6);
+
+    //     console.log("alice registered", intime.registered(alice));
+    // }
+
+    function test_battle() public {
+        vm.warp(block.timestamp + 1 hours + 1);
+        vm.startPrank(owner);
+        intime.battle{value: 15000000000001}(alice, bob);
+        vm.stopPrank();
+    }
+
+    function test_withdraw() public {
+        test_battle();
+
+        vm.warp(block.timestamp + 2 hours + 1);
+        vm.startPrank(owner);
+        intime.withdraw(1e6, alice);
+        vm.stopPrank();
+
+        assertEq(IERC20(usdc).balanceOf(alice), 1e6);
+        assertEq(IERC20(usdc).balanceOf(address(intime)), 1e6);
     }
 }

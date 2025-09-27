@@ -22,8 +22,9 @@ contract DeployGameScript is Script {
     function run() public {
         vm.startBroadcast();
 
-        Intime game =
-            Intime(factory.createGame("Intime", block.timestamp + 1 hours, block.timestamp + 2 hours, 1, entropy, usdc));
+        Intime game = Intime(
+            factory.createGame("Intime", block.timestamp + 1 hours, block.timestamp + 2 hours, 20, entropy, usdc)
+        );
 
         console.log("Game deployed at", address(game));
 
