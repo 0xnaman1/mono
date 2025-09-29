@@ -1,34 +1,10 @@
+import { CONFIG } from "@/lib/config";
 import { NextRequest, NextResponse } from "next/server";
 import { createWalletClient, createPublicClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { InTimeAbi } from "@/app/interfaces/InTimeAbi";
 
 import { mainnet } from "viem/chains";
-
-// Configuration - you should move this to environment variables
-const CONFIG = {
-  faucetPK: process.env.PK || "",
-  factory: "0x9D11971281d8481Aba69161936391A64F466A071",
-  game: "0x09507C45f36E0f633e81f4D8579666fd327De321",
-  rpc: process.env.RPC_URL || "https://eth-mainnet.g.alchemy.com/v2/demo",
-  battleContractAddress: process.env.BATTLE_CONTRACT_ADDRESS || "",
-};
-
-// Battle contract ABI - you'll need to replace this with your actual contract ABI
-const battleAbi = [
-  {
-    inputs: [
-      { name: "player1", type: "address" },
-      { name: "player2", type: "address" },
-    ],
-    name: "battle",
-    outputs: [
-      { name: "winner", type: "address" },
-      { name: "damage", type: "uint256" },
-    ],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-] as const;
 
 export const viemClient = createWalletClient({
   account: privateKeyToAccount(`0x${CONFIG.faucetPK}`),
@@ -45,12 +21,15 @@ export async function POST(request: NextRequest) {
   try {
     // Parse request body
     const body = await request.json();
-    const { player1Address, player2Address } = body;
+    const { gameAddress, player1Address, player2Address } = body;
 
     // Validate input
-    if (!player1Address || !player2Address) {
+    if (!player1Address || !player2Address || !gameAddress) {
       return NextResponse.json(
-        { error: "Both player1Address and player2Address are required" },
+        {
+          error:
+            "Both player1Address, player2Address and gameAddress are required",
+        },
         { status: 400 }
       );
     }
@@ -59,7 +38,8 @@ export async function POST(request: NextRequest) {
     const addressRegex = /^0x[a-fA-F0-9]{40}$/;
     if (
       !addressRegex.test(player1Address) ||
-      !addressRegex.test(player2Address)
+      !addressRegex.test(player2Address) ||
+      !addressRegex.test(gameAddress)
     ) {
       return NextResponse.json(
         { error: "Invalid Ethereum address format" },
@@ -76,9 +56,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate contract address
-    if (!CONFIG.battleContractAddress) {
+    if (!CONFIG.game) {
       return NextResponse.json(
-        { error: "Battle contract address not configured" },
+        { error: "Game contract address not configured" },
         { status: 500 }
       );
     }
@@ -93,8 +73,8 @@ export async function POST(request: NextRequest) {
 
     // Call the battle function on the smart contract
     const hash = await viemClient.writeContract({
-      address: CONFIG.battleContractAddress as `0x${string}`,
-      abi: battleAbi,
+      address: CONFIG.game as `0x${string}`,
+      abi: InTimeAbi,
       functionName: "battle",
       args: [player1Address as `0x${string}`, player2Address as `0x${string}`],
       chain: viemClient.chain,

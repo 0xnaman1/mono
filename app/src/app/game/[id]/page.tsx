@@ -5,47 +5,40 @@ import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import BattleDrawer from "@/components/BattleDrawer";
 import { useState, useEffect } from "react";
-import { useWalletClient, useAccount } from "wagmi";
+import { useWalletClient, useAccount, usePublicClient } from "wagmi";
 import { parseEther } from "viem";
+import { InTimeAbi } from "@/app/interfaces/InTimeAbi";
+import { CONFIG } from "@/lib/config";
+import { ERC20Abi } from "@/app/interfaces/ERC20Abi";
+import { toast } from "sonner";
+import { useNFCStore } from "@/lib/state";
 
-// Contract configuration
-const CONTRACT_ADDRESS = "0x58706f42b71b44b463E085707Afb62456608cA8e"; // Replace with actual contract address
-const CONTRACT_ABI = [
-  {
-    inputs: [
-      {
-        internalType: "address",
-        name: "player",
-        type: "address",
-      },
-    ],
-    name: "initialize",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-] as const;
-
-export default async function GamePage({
+export default function GamePage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const resolvedParams = await params;
-
-  return <GamePageClient params={resolvedParams} />;
+  return <GamePageClient params={params} />;
 }
 
-function GamePageClient({ params }: { params: { id: string } }) {
+function GamePageClient({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const walletClient = useWalletClient();
+  const publicClient = usePublicClient();
   const { address: eoa } = useAccount();
+  const { bandInfo, setBandInfo, login, logout, clearBandInfo, hasHydrated } =
+    useNFCStore();
 
   // Register section state
   const [registerAddress, setRegisterAddress] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isClient, setIsClient] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [gameId, setGameId] = useState<string | null>(null);
+  const [isRegistered, setIsRegistered] = useState<boolean>(false);
+  const [healthPoints, setHealthPoints] = useState<number | null>(null);
+  const [isCheckingRegistration, setIsCheckingRegistration] = useState(false);
+  const [isLoadingHealth, setIsLoadingHealth] = useState(false);
 
   // Transaction state
   const [isTransactionLoading, setIsTransactionLoading] = useState(false);
@@ -53,15 +46,72 @@ function GamePageClient({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     setIsClient(true);
-  }, []);
+    // Resolve the Promise params
+    params.then((resolvedParams) => {
+      setGameId(resolvedParams.id);
+    });
+  }, [params]);
+
+  // Manual contract calls after hydration
+  useEffect(() => {
+    const fetchContractData = async () => {
+      if (!hasHydrated && !bandInfo) {
+        return;
+      }
+
+      try {
+        // Check registration status
+        setIsCheckingRegistration(true);
+        const registrationResult = await publicClient?.readContract({
+          abi: InTimeAbi,
+          address: CONFIG.game as `0x${string}`,
+          functionName: "isRegistered",
+          args: [bandInfo?.etherAddress as `0x${string}`],
+        });
+        setIsRegistered(registrationResult as boolean);
+        console.log("registrationStatus", registrationResult);
+
+        // Get health points
+        setIsLoadingHealth(true);
+        const healthResult = await publicClient?.readContract({
+          abi: InTimeAbi,
+          address: CONFIG.game as `0x${string}`,
+          functionName: "myHealth",
+          args: [bandInfo?.etherAddress as `0x${string}`],
+        });
+        setHealthPoints(Number(healthResult));
+        console.log("healthPoints", healthResult);
+      } catch (error) {
+        console.error("Failed to fetch contract data:", error);
+      } finally {
+        setIsCheckingRegistration(false);
+        setIsLoadingHealth(false);
+      }
+    };
+
+    fetchContractData();
+  }, [hasHydrated, bandInfo?.etherAddress, publicClient]);
+
+  // Log hydration status for debugging
+  useEffect(() => {
+    console.log("hasHydrated", hasHydrated);
+  }, [hasHydrated, bandInfo]);
+
+  // Log health points for debugging
+  useEffect(() => {
+    console.log("healthPoints", healthPoints);
+    if (healthPoints !== undefined) {
+      console.log("healthPoints", healthPoints);
+    }
+  }, [healthPoints]);
 
   // Sample game data - in real app this would come from API
   const gameData = {
-    id: params.id,
+    id: gameId || "loading",
     title: "Time Rush Challenge",
     duration: "2:00 PM - 4:00 PM",
     progress: 65,
-    myHealth: 78, // Current HP out of 100
+    myHealth: healthPoints ?? 0, // Current HP from contract
     maxHealth: 100,
   };
 
@@ -185,22 +235,63 @@ function GamePageClient({ params }: { params: { id: string } }) {
     setIsTransactionLoading(true);
     setError(null);
 
+    // Approve the USDC contract to spend the tokens first
     try {
-      // Execute the contract transaction
-      const hash = await walletClient.data.writeContract({
-        abi: CONTRACT_ABI,
-        address: CONTRACT_ADDRESS,
-        functionName: "initialize",
-        args: [registerAddress as `0x${string}`],
-        value: parseEther("2"), // $2 stake
+      const approveHash = await walletClient.data.writeContract({
+        abi: ERC20Abi,
+        address: CONFIG.usdc as `0x${string}`,
+        functionName: "approve",
+        args: [CONFIG.game as `0x${string}`, parseEther("1")],
         account: eoa,
       });
 
-      setTransactionHash(hash);
-      console.log("Transaction submitted:", hash);
+      toast.success("USDC Approval Successful", {
+        description: `Transaction Hash: ${approveHash}`,
+        action: {
+          label: "View on Explorer",
+          onClick: () =>
+            window.open(`https://basescan.org/tx/${approveHash}`, "_blank"),
+        },
+      });
+
+      setTransactionHash(approveHash);
+      console.log("Approval transaction submitted:", approveHash);
     } catch (error) {
-      console.error("Transaction failed:", error);
-      setError("Transaction failed. Please try again.");
+      console.error("Approval transaction failed:", error);
+      setError("Approval transaction failed. Please try again.");
+      toast.error("Approval Failed", {
+        description: "Failed to approve USDC spending. Please try again.",
+      });
+      return;
+    }
+
+    try {
+      // Execute the contract transaction
+      const registerHash = await walletClient.data.writeContract({
+        abi: InTimeAbi,
+        address: CONFIG.game as `0x${string}`,
+        functionName: "register",
+        args: [registerAddress as `0x${string}`],
+        account: eoa,
+      });
+
+      toast.success("Registration Successful!", {
+        description: `Transaction Hash: ${registerHash}`,
+        action: {
+          label: "View on Explorer",
+          onClick: () =>
+            window.open(`https://basescan.org/tx/${registerHash}`, "_blank"),
+        },
+      });
+
+      setTransactionHash(registerHash);
+      console.log("Registration transaction submitted:", registerHash);
+    } catch (error) {
+      console.error("Registration transaction failed:", error);
+      setError("Registration transaction failed. Please try again.");
+      toast.error("Registration Failed", {
+        description: "Failed to register for the game. Please try again.",
+      });
     } finally {
       setIsTransactionLoading(false);
     }
@@ -259,97 +350,141 @@ function GamePageClient({ params }: { params: { id: string } }) {
             {/* Register Section */}
             <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 mb-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                Register
+                {!hasHydrated
+                  ? "Loading..."
+                  : isCheckingRegistration
+                  ? "Checking Status"
+                  : isRegistered
+                  ? "Registration Status"
+                  : "Register"}
               </h2>
-              <p className="text-sm text-gray-600 mb-6">
-                Connect your ETHGlobal NFC tag to register for the game after
-                staking $2 and get a chance to compete against multiple people.
-              </p>
-
-              {/* Error Display */}
-              {error && (
-                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-red-700 text-sm">{error}</p>
+              {!hasHydrated ? (
+                <div className="text-center py-8">
+                  <div className="inline-flex items-center px-4 py-2 rounded-full bg-gray-100 text-gray-600 text-sm font-medium mb-4">
+                    ⏳ Loading User Data...
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    Please wait while we load your information...
+                  </p>
                 </div>
-              )}
+              ) : isCheckingRegistration ? (
+                <div className="text-center py-8">
+                  <div className="inline-flex items-center px-4 py-2 rounded-full bg-blue-100 text-blue-800 text-sm font-medium mb-4">
+                    ⏳ Checking Registration...
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    Verifying your registration status...
+                  </p>
+                </div>
+              ) : isRegistered ? (
+                <div className="text-center py-8">
+                  <div className="inline-flex items-center px-4 py-2 rounded-full bg-green-100 text-green-800 text-sm font-medium mb-4">
+                    ✅ Already Registered
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    You are already registered for this game with address:{" "}
+                    <span className="font-mono text-xs">
+                      {bandInfo?.etherAddress
+                        ? formatAddress(bandInfo.etherAddress)
+                        : "N/A"}
+                    </span>
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-600 mb-6">
+                    Connect your ETHGlobal NFC tag to register for the game
+                    after staking $2 and get a chance to compete against
+                    multiple people.
+                  </p>
 
-              {/* Debug Info - Remove this in production */}
-              <div className="mb-4 p-3 bg-gray-100 border border-gray-300 rounded-lg text-xs">
-                <p>
-                  <strong>Debug Info:</strong>
-                </p>
-                <p>
-                  NFC Address:{" "}
-                  {registerAddress ? "✅ Scanned" : "❌ Not scanned"}
-                </p>
-                <p>
-                  Wallet Connected: {eoa ? "✅ Connected" : "❌ Not connected"}
-                </p>
-                <p>
-                  Wallet Client:{" "}
-                  {walletClient.data ? "✅ Available" : "❌ Not available"}
-                </p>
-                <p>
-                  Transaction Loading:{" "}
-                  {isTransactionLoading ? "⏳ Loading" : "✅ Ready"}
-                </p>
-                <p>
-                  Button Disabled:{" "}
-                  {!registerAddress ||
-                  !eoa ||
-                  !walletClient.data ||
-                  isTransactionLoading
-                    ? "❌ Yes"
-                    : "✅ No"}
-                </p>
-              </div>
-
-              <div className="space-y-4">
-                <div className="bg-gray-100 rounded-lg p-4">
-                  {registerAddress ? (
-                    <p className="font-mono text-sm">
-                      {formatAddress(registerAddress)}
-                    </p>
-                  ) : (
-                    <p className="text-gray-500">Connect your NFC card</p>
+                  {/* Error Display */}
+                  {error && (
+                    <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                      <p className="text-red-700 text-sm">{error}</p>
+                    </div>
                   )}
-                </div>
 
-                <Button
-                  onClick={scanNFC}
-                  disabled={isScanning}
-                  variant="outline"
-                  className="w-full"
-                >
-                  {isScanning ? "Scanning..." : "Connect NFC Card"}
-                </Button>
-
-                <Button
-                  onClick={registerTransaction}
-                  className="w-full"
-                  disabled={
-                    !registerAddress ||
-                    !eoa ||
-                    !walletClient.data ||
-                    isTransactionLoading
-                  }
-                >
-                  {isTransactionLoading
-                    ? "Processing Transaction..."
-                    : transactionHash
-                    ? "Registration Complete!"
-                    : "Register for Game"}
-                </Button>
-
-                {transactionHash && (
-                  <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                    <p className="text-green-700 text-sm">
-                      Transaction successful! Hash:{" "}
-                      {transactionHash.slice(0, 10)}...
+                  {/* Debug Info - Remove this in production */}
+                  <div className="mb-4 p-3 bg-gray-100 border border-gray-300 rounded-lg text-xs">
+                    <p>
+                      <strong>Debug Info:</strong>
+                    </p>
+                    <p>
+                      NFC Address:{" "}
+                      {registerAddress ? "✅ Scanned" : "❌ Not scanned"}
+                    </p>
+                    <p>
+                      Wallet Connected:{" "}
+                      {eoa ? "✅ Connected" : "❌ Not connected"}
+                    </p>
+                    <p>
+                      Wallet Client:{" "}
+                      {walletClient.data ? "✅ Available" : "❌ Not available"}
+                    </p>
+                    <p>
+                      Transaction Loading:{" "}
+                      {isTransactionLoading ? "⏳ Loading" : "✅ Ready"}
+                    </p>
+                    <p>
+                      Button Disabled:{" "}
+                      {!registerAddress ||
+                      !eoa ||
+                      !walletClient.data ||
+                      isTransactionLoading
+                        ? "❌ Yes"
+                        : "✅ No"}
                     </p>
                   </div>
-                )}
-              </div>
+
+                  <div className="space-y-4">
+                    <div className="bg-gray-100 rounded-lg p-4">
+                      {registerAddress ? (
+                        <p className="font-mono text-sm">
+                          {formatAddress(registerAddress)}
+                        </p>
+                      ) : (
+                        <p className="text-gray-500">Connect your NFC card</p>
+                      )}
+                    </div>
+
+                    <Button
+                      onClick={scanNFC}
+                      disabled={isScanning}
+                      variant="outline"
+                      className="w-full"
+                    >
+                      {isScanning ? "Scanning..." : "Connect NFC Card"}
+                    </Button>
+
+                    <Button
+                      onClick={registerTransaction}
+                      className="w-full"
+                      disabled={
+                        !registerAddress ||
+                        !eoa ||
+                        !walletClient.data ||
+                        isTransactionLoading
+                      }
+                    >
+                      {isTransactionLoading
+                        ? "Processing Transaction..."
+                        : transactionHash
+                        ? "Registration Complete!"
+                        : "Register for Game"}
+                    </Button>
+
+                    {transactionHash && (
+                      <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <p className="text-green-700 text-sm">
+                          Transaction successful! Hash:{" "}
+                          {transactionHash.slice(0, 10)}...
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Battle Section */}
@@ -379,30 +514,64 @@ function GamePageClient({ params }: { params: { id: string } }) {
                   My Health
                 </h2>
               </div>
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Health Points</span>
-                  <span className="font-medium">
-                    {gameData.myHealth}/{gameData.maxHealth}
-                  </span>
+              {!hasHydrated ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Health Points</span>
+                    <span className="font-medium text-gray-400">
+                      Loading User Data...
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div className="h-3 rounded-full bg-gray-300 animate-pulse"></div>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>Critical</span>
+                    <span>Full Health</span>
+                  </div>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div
-                    className={`h-3 rounded-full transition-all duration-300 ${getHealthColor(
-                      gameData.myHealth
-                    )}`}
-                    style={{
-                      width: `${
-                        (gameData.myHealth / gameData.maxHealth) * 100
-                      }%`,
-                    }}
-                  ></div>
+              ) : isLoadingHealth ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Health Points</span>
+                    <span className="font-medium text-gray-400">
+                      Loading...
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div className="h-3 rounded-full bg-gray-300 animate-pulse"></div>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>Critical</span>
+                    <span>Full Health</span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>Critical</span>
-                  <span>Full Health</span>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Health Points</span>
+                    <span className="font-medium">
+                      {gameData.myHealth}/{gameData.maxHealth}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div
+                      className={`h-3 rounded-full transition-all duration-300 ${getHealthColor(
+                        gameData.myHealth
+                      )}`}
+                      style={{
+                        width: `${
+                          (gameData.myHealth / gameData.maxHealth) * 100
+                        }%`,
+                      }}
+                    ></div>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>Critical</span>
+                    <span>Full Health</span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
 

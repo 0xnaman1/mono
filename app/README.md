@@ -30,3 +30,6 @@ pnpm dev
 
 - [ ] myhealth() hp - (current time - last updated time) / decay
 - [ ] game info (start, end, progress, decay)
+
+- [ ] only testnet base
+- [ ] isRegistered()

@@ -3,6 +3,7 @@
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { NFCLoginDrawer } from "./NFCLoginDrawer";
 
 export default function Navbar() {
   return (
@@ -13,6 +14,7 @@ export default function Navbar() {
 
           <div className="flex items-center gap-4">
             <ConnectButton />
+            <NFCLoginDrawer />
           </div>
         </div>
       </div>
